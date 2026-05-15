@@ -63,8 +63,9 @@ jobs:
         username: ${{ secrets.SERVER_USER }}
         key: ${{ secrets.SERVER_SSH_KEY }}
         script: |
-          cd /home/ubuntu/fastapi-app
+          cd /home/ubuntu/genai_demo_fastAPi
           git pull origin main
           source venv/bin/activate
+          pkill -f "uvicorn app:app" || true
           pip install -r requirements.txt
-          sudo systemctl restart fastapi
+          nohup uvicorn app:app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
