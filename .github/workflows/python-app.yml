@@ -69,24 +69,42 @@ jobs:
 
           pip install -r requirements.txt
 
-          # Stop old process
-          if pgrep -f "uvicorn app:app" > /dev/null; then
-            echo "Stopping existing app..."
-            pkill -f "uvicorn app:app"
-            sleep 2
+          APP_PORT=8000
+          PIDFILE=app.pid
+
+          # Stop old process (PID file — avoid pkill -f; it matches this deploy script's cmdline)
+          if [ -f "$PIDFILE" ]; then
+            OLD_PID=$(cat "$PIDFILE")
+            if kill -0 "$OLD_PID" 2>/dev/null; then
+              echo "Stopping existing app (PID $OLD_PID)..."
+              kill "$OLD_PID"
+              sleep 2
+              kill -0 "$OLD_PID" 2>/dev/null && kill -9 "$OLD_PID" 2>/dev/null || true
+            fi
+            rm -f "$PIDFILE"
           fi
 
-          # Start app
+          # Fallback: free the port if something else is listening
+          if command -v fuser >/dev/null 2>&1; then
+            fuser -k "${APP_PORT}/tcp" 2>/dev/null || true
+          elif command -v lsof >/dev/null 2>&1; then
+            lsof -ti:"${APP_PORT}" | xargs -r kill -9 2>/dev/null || true
+          fi
+
+          # Start app in a new session so it survives SSH disconnect
           echo "Starting app..."
-          nohup uvicorn app:app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+          setsid ./venv/bin/uvicorn app:app --host 0.0.0.0 --port "${APP_PORT}" \
+            >> app.log 2>&1 < /dev/null &
+          echo $! > "$PIDFILE"
+          disown -h "$(cat "$PIDFILE")" 2>/dev/null || true
 
           # Wait and verify
           sleep 5
 
-          if curl -f http://localhost:8000 > /dev/null; then
+          if curl -sf "http://127.0.0.1:${APP_PORT}/" > /dev/null; then
             echo "Deployment successful"
           else
-            echo " App failed to start"
-            tail -n 20 app.log
+            echo "App failed to start"
+            tail -n 30 app.log
             exit 1
           fi
