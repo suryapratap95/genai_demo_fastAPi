@@ -14,40 +14,34 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # 1. Checkout code
     - name: Checkout code
       uses: actions/checkout@v4
 
-    # 2. Setup Python
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
         python-version: "3.11"
 
-    # 3. Install dependencies
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install flake8 pytest uvicorn
         if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
 
-    # 4. Lint
-    - name: Lint with flake8
+    - name: Lint
       run: |
         flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
         flake8 . --count --max-complexity=10 --max-line-length=127 --statistics
 
-    # 5. Run tests
     - name: Run tests
       run: |
         pytest || echo "No tests found"
 
-    # 6. Basic app startup check (important for FastAPI)
     - name: Check FastAPI app startup
       run: |
-        uvicorn app:app --host 0.0.0.0 --port 8000 &
+        uvicorn app:app --host 127.0.0.1 --port 8000 &
         sleep 5
-        curl -f http://0.0.0.0:8000 || exit 1
+        curl -f http://127.0.0.1:8000 || exit 1
 
   deploy:
     needs: build-and-test
@@ -55,7 +49,6 @@ jobs:
     if: github.ref == 'refs/heads/main'
 
     steps:
-    # Deploy to server via SSH
     - name: Deploy to server
       uses: appleboy/ssh-action@v1.0.0
       with:
@@ -64,11 +57,36 @@ jobs:
         key: ${{ secrets.SERVER_SSH_KEY }}
         script: |
           cd /home/ubuntu/genai_demo_fastAPi
+
           git pull origin main
+
+          # Ensure venv exists
+          if [ ! -d "venv" ]; then
+            python3 -m venv venv
+          fi
+
           source venv/bin/activate
+
+          pip install -r requirements.txt
+
+          # Stop old process
           if pgrep -f "uvicorn app:app" > /dev/null; then
+            echo "Stopping existing app..."
             pkill -f "uvicorn app:app"
             sleep 2
           fi
-          pip install -r requirements.txt
+
+          # Start app
+          echo "Starting app..."
           nohup uvicorn app:app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
+
+          # Wait and verify
+          sleep 5
+
+          if curl -f http://localhost:8000 > /dev/null; then
+            echo "Deployment successful"
+          else
+            echo " App failed to start"
+            tail -n 20 app.log
+            exit 1
+          fi
