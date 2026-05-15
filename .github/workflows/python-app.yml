@@ -66,6 +66,9 @@ jobs:
           cd /home/ubuntu/genai_demo_fastAPi
           git pull origin main
           source venv/bin/activate
-          pkill -f "uvicorn app:app" || true
+          if pgrep -f "uvicorn app:app" > /dev/null; then
+            pkill -f "uvicorn app:app"
+            sleep 2
+          fi
           pip install -r requirements.txt
           nohup uvicorn app:app --host 0.0.0.0 --port 8000 > app.log 2>&1 &
