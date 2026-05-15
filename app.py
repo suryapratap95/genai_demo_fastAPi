@@ -51,6 +51,6 @@ def create_item(item: ItemCreate):
     _next_id += 1
     items.append(new_item)
     return {
-        "message": "Item added successfully!",
+        "message": "Item added successfull",
         "item": new_item,
     }
