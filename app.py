@@ -22,6 +22,8 @@ items: list[Item] = [
     Item(id=1, name="Phone", price=1009.99),
     Item(id=2, name="Tablet", price=190.50),
     Item(id=3, name="Laptop", price=4234.25),
+    Item(id=3, name="Camera", price=23424.25),
+
 ]
 _next_id = 4
 
